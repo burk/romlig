@@ -1,0 +1,309 @@
+\documentclass[a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage{fullpage}
+\usepackage{amsmath}
+\DeclareMathOperator*{\argmin}{arg\,min}
+\DeclareMathOperator*{\argmax}{arg\,max}
+\title{TMA 4250 -- Spatial statistics\\
+Exercise 3}
+\author{Bjørn Rustad, 707765}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\section*{Problem 1: Markov Random Fields}
+
+We start by loading the needed libraries and data.
+<<tidy=FALSE>>=
+library(spatial)
+library(MASS)
+
+o <- as.matrix(read.table('seismic.dat'))
+o <- matrix(o, 75, 75)
+@
+
+\subsection*{a) Uniform prior}
+From the likelihood model in the exercise, we have
+\begin{equation}
+o_x \mid L_x = l_x \sim
+\begin{cases}
+\mathcal{N}(0.02, 0.06^2) & \text{if } l_x = \text{sand} \\
+\mathcal{N}(0.08, 0.06^2) & \text{if } l_x = \text{shale}.
+\end{cases}
+\end{equation}
+Using that $P(L = l) = \text{const}$ we obtain the posterior model
+\begin{equation}
+P(L_x = l_x \mid o_x) = \frac{P(o_x \mid L_x = l_x) P(L_x = l_x)}{P(o_x)} \propto
+\begin{cases}
+\frac{1}{0.06 \sqrt{2\pi}} \exp{\left(-\frac{(o_x - 0.02)^2}{2 \cdot 0.06^2}\right)} & \text{if } l_x = \text{sand} \\
+\frac{1}{0.06 \sqrt{2\pi}} \exp{\left(-\frac{(o_x - 0.08)^2}{2 \cdot 0.06^2}\right)} & \text{if } l_x = \text{shale}
+\end{cases}
+\label{eq:oxposterior}
+\end{equation}
+
+<<tidy=FALSE>>=
+drawL <- function(o) {
+  Lsand  <- dnorm(o, mean=0.02, sd=0.06)
+  Lshale <- dnorm(o, mean=0.08, sd=0.06)
+  Pshale <- Lshale / (Lsand + Lshale)
+  r <- matrix(runif(o), nrow(o), ncol(o))
+  return(Pshale > r)
+}
+@
+
+<<uniform, tidy=FALSE, fig.cap='10 simulations of the posterior mosaic using the uniform prior', cache=TRUE, eval=TRUE, echo=TRUE>>=
+par(mfrow=c(3,4))
+for(i in 1:10) {
+  image(drawL(o))
+}
+@
+
+\subsubsection*{Expected value}
+Since the model is very simple without any dependence between the squares, the expressions for the expected value and variance are also relatively simple. It is chosen that $l_x = 0$ for sand and $l_x = 1$ for shale. This gives
+\begin{equation}
+E(L_x \mid o_x) = 1 \cdot P(L_x = 1 \mid o_x) = \frac{\exp{\left(-\frac{(o_x - 0.08)^2}{2 \cdot 0.06^2}\right)}}{\exp{\left(-\frac{(o_x - 0.02)^2}{2 \cdot 0.06^2}\right)} + \exp{\left(-\frac{(o_x - 0.08)^2}{2 \cdot 0.06^2}\right)}}.
+\end{equation}
+
+\subsubsection*{Variance}
+For the variance we obtain
+\begin{equation}
+\begin{aligned}
+\mathrm{Var}(L_x \mid o_x) &= P(L_x = 0 \mid o_x) (0 - E(L_x \mid o_x))^2 + P(L_x = 1 \mid o_x) (1 - E(L_x \mid o_x))^2 \\
+&= \frac{\exp{\left(-\frac{(o_x - 0.02)^2}{2 \cdot 0.06^2} -\frac{(o_x - 0.08)^2}{2 \cdot 0.06^2} \right)}}{\left(\exp{\left(-\frac{(o_x - 0.02)^2}{2 \cdot 0.06^2}\right)} + \exp{\left(-\frac{(o_x - 0.08)^2}{2 \cdot 0.06^2}\right)}\right)^2}
+\end{aligned}
+\end{equation}
+
+Images of the expectation and variation are drawn as follows, and shown in Figure \ref{fig:evar}.
+<<evar, tidy=FALSE, fig.cap='Image of the expectation and variation.', cache=TRUE, eval=TRUE, echo=TRUE, fig.height=4>>=
+Lsand  <- dnorm(o, mean=0.02, sd=0.06)
+Lshale <- dnorm(o, mean=0.08, sd=0.06)
+Pshale <- Lshale / (Lsand + Lshale)
+Var    <- (Lshale * Lsand) / ((Lshale + Lsand)^2)
+par(mfrow=c(1,2))
+image(Pshale, main="Expectation")
+image(Var, main="Variation")
+@
+
+\subsubsection*{MMAP}
+The maximum marginal a posteriori prediction is given by the realization that maximizes the posterior distribution
+\begin{equation}
+\hat{l} = \{ \hat{l}_x ; \hat{l}_x = \argmax_{l_x} P(L_x = l_x \mid o) \}.
+\end{equation}
+In our simple model without any inter-square dependencies, this is very simple, it is just to pick the one of the two configurations in \eqref{eq:oxposterior} which has the biggest probability. Since it is only the exponent that varies, we pick the one with the biggest (most positive) exponent
+\begin{equation}
+\hat{l}_x = \begin{cases}
+0 & \text{if } -(o_x - 0.02)^2 > -(o_x - 0.08)^2\\
+1 & \text{else.}
+\end{cases}
+\end{equation}
+
+The MMAP for our simple model is calculated as follows:
+<<mmap, tidy=FALSE, fig.cap='Image of the MMAP.', cache=TRUE, eval=TRUE, echo=TRUE, fig.height=4, fig.width=4>>=
+Lsand  <- dnorm(o, mean=0.02, sd=0.06)
+Lshale <- dnorm(o, mean=0.08, sd=0.06)
+image(Lshale > Lsand, main="MMAP")
+@
+and Figure \ref{fig:mmap} shows an image of our MMAP.
+
+\subsection*{b) Neighborhood model}
+The Gibbs formulation for the MRF is as follows
+\begin{equation}
+P(L = l) \propto \exp\left(\sum_{(x,y)\in C} \beta I(l_x = l_y)\right),
+\end{equation}
+where $C$ is the set of all cliques (here of order 2). It can be verified that this is correct by conditioning on the neighbors and removing all factors not depending on $l_x$
+\begin{equation}
+P(L_x = l_x \mid L_y = l_y ; y \in \partial_x) \propto \exp\left(\sum_{y \in \partial_x} \beta I(l_x = l_y)\right),
+\end{equation}
+which we see corresponds to the original formulation in the exercise.
+
+The posterior model is written as follows
+\begin{equation}
+\begin{aligned}
+P(L = l \mid o) & \propto P(o \mid L = l) P(L = l) \\
+& \propto \exp\left( -\sum_{\substack{l_x \\ l_x = 0}} \frac{(o_x - 0.02)^2}{2 \cdot 0.06^2} - \sum_{\substack{l_x \\ l_x = 1}} \frac{(o_x - 0.08)^2}{2 \cdot 0.06^2} \right) \exp\left(\sum_{(x,y)\in C} \beta I(l_x = l_y)\right).
+\end{aligned}
+\end{equation}
+The two different cases of \eqref{eq:oxposterior} have been combined into one expression for $P(o_x \mid L_x = l_x)$.
+
+Again, we obtain the single site posterior model by removing all factors not depending on $l_x$
+\begin{equation}
+P(L_x = l_x \mid L_{-x} = l_{-x} , o) 
+\propto \exp\left(\sum_{y \in \partial_x} \beta I(l_x = l_y)\right) \cdot
+\begin{cases}
+\exp\left( - \frac{(o_x - 0.02)^2}{2 \cdot 0.06^2} \right) & \text{if } l_x = 0 \\
+\exp\left( - \frac{(o_x - 0.08)^2}{2 \cdot 0.06^2} \right) & \text{if } l_x = 1.
+\end{cases}
+\end{equation}
+
+A Gibbs sampler can be used to sample from $P(L \mid o)$, and these samples can be used to estimate $\mathrm{E}(L \mid o)$, $\mathrm{Var}(L \mid o)$ and $\mathrm{MMAP}(L \mid o)$.
+
+\subsubsection*{Maximum pseudo-likelihood estimate for $\beta$}
+The geologically comparable domain is loaded:
+<<tidy=FALSE>>=
+complit <- as.matrix(read.table('complit.dat'))
+@
+and inspected:
+<<complit, tidy=FALSE, fig.cap='Geologically comparable domain', cache=TRUE, eval=TRUE, echo=TRUE, fig.height=3, fig.width=3>>=
+image(complit)
+@
+
+Figure \ref{fig:complit} shows the domain, which we will use to estimate $\beta$ by a pseudo-likelihood procedure.
+
+The constant in the prior model in the exercise can be calculated by requiring that the probabilities sum to one and we obtain
+\begin{equation}
+P(L_x = l_x \mid L_y = l_y ; y \in \partial_x) = \frac{\exp\left(\beta \sum_{y \in \partial_x} I(l_y = l_x) \right)}{\exp\left(\beta \sum_{y \in \partial_x} I(l_y = l_x) \right) + \exp\left(\beta \sum_{y \in \partial_x} I(l_y = 1 - l_x) \right)}
+\end{equation}
+In the pseudo-likelihood procedure we approximate the joint prior by
+\begin{equation}
+P(L = l) = \prod_x P(L_x = l_x \mid L_y = l_y ; y \in \partial_x)
+\end{equation}
+
+The function \texttt{pseudoProb} calculates this probability estimate (or rather, the logarithm of it) for some value of $\beta$, which we will use to find our pseudo-likelihood maximizer for $\beta$.
+<<tidy=FALSE>>=
+modF <- function(i, n) {
+  # i is from 0 to n+1
+  # should return from 1 to n
+  i <- i - 1
+  # i is now from -1 to n
+  i <- i %% n
+  # i is now from 0 to n-1
+  i <- i + 1
+  # i is now from 1 to n
+  return(i)
+}
+
+sumAround <- function(L, r, c, comp) {
+  s <- 0
+  s <- s + (L[modF(r+1,nrow(L)),c] == comp)
+  s <- s + (L[modF(r-1,nrow(L)),c] == comp)
+  s <- s + (L[r,modF(c+1,ncol(L))] == comp)
+  s <- s + (L[r,modF(c-1,ncol(L))] == comp)
+}
+
+pseudoProb <- function(L, beta) {
+  tot <- 0
+
+  for (i in 1:nrow(L)) {
+    for (j in 1:ncol(L)) {
+      tot <- tot + beta * sumAround(L, i, j, L[i,j]) 
+      tot <- tot - log(exp(beta * sumAround(L, i, j, 0))
+                       + exp(beta * sumAround(L, i, j, 1)))
+    }
+  }
+  
+  return(tot)
+}
+@
+
+The optimal value for $\beta$ can be found for example with R's built-in \texttt{optim} function.
+<<tidy=FALSE, cache=TRUE, warning=FALSE>>=
+f <- function(beta) {
+  return(-pseudoProb(complit, beta))
+}
+
+betaopt <- optim(1, f)$par
+@
+The value for our estimator $\hat{\beta}$ is \Sexpr{betaopt}, and this will be used in our Gibbs sampler.
+
+\subsubsection*{Gibbs sampler}
+The Gibbs sampler is programmed as follows, it is by no means perfect.
+<<tidy=FALSE>>=
+posterior <- function(L, obs, beta) {
+  tot <- 0
+  for (i in 1:nrow(obs)) {
+    for (j in 1:ncol(obs)) {
+      if (L[i,j] == 0) {
+        tot <- tot - (obs[i,j] - 0.02)^2 / (2*0.06^2)
+      } else {
+        tot <- tot - (obs[i,j] - 0.08)^2 / (2*0.06^2)
+      }
+      
+      tot <- tot + beta * (L[i,j] == L[i,modF(j+1, ncol(obs))])
+      tot <- tot + beta * (L[i,j] == L[modF(i+1, nrow(obs)),j])
+    }
+  }
+  return(tot)
+}
+
+gibbs <- function(obs, beta, iter) {
+  
+  # Resulting images stacked behind eachother
+  res <- array(NA, c(nrow(obs), ncol(obs), iter))
+  
+  # Initial value, something else than just 0, to get it going
+  res[,,1] = 1 * (obs > 0)
+  
+  p0p <- dnorm(obs, mean=0.02, sd=0.06)
+  p1p <- dnorm(obs, mean=0.08, sd=0.06)
+  
+  for (it in 2:iter) {
+    # Image of most current values to use in Gibbs update
+    use <- res[,,it-1]
+    
+    # Could (should?) iterate randomly here for example
+    for (i in 1:nrow(obs)) {
+      for (j in 1:ncol(obs)) {
+        
+        # Proportional to the probability of 0 and 1 in this square
+        sum0 <- sumAround(use, i, j, 0)
+        p0q <- p0p[i,j] * exp(beta * sum0)
+        p1q <- p1p[i,j] * exp(beta * (4 - sum0))
+        
+        # Probability of 0 in this square
+        p0 <- p0q / (p0q + p1q)
+        
+        # Insert 0 or 1?
+        r <- runif(1)
+        if (r < p0) {
+          res[i,j,it] = 0
+          use[i,j] = 0
+        } else {
+          res[i,j,it] = 1
+          use[i,j] = 1
+        }
+      }
+    }
+  }
+  return(res)
+}
+@
+There are a few issues with it. It is not very fast, some optimizations could probably be done to the way the neighborhood dependance is recalculated each time. Maybe some \texttt{apply()} magic would have helped.
+
+We plot some figures from a realization of the chain as follows:
+<<realisation, tidy=FALSE, fig.cap='Some samples from the Gibbs sampler', cache=TRUE, eval=TRUE, echo=TRUE>>=
+n <- 1000
+burnin <- 500
+samples <- gibbs(o, betaopt, n)
+par(mfrow=c(3,4))
+imgs <- sample(burnin:n, 10)
+imgs <- imgs[order(imgs)]
+for (i in 1:10) {
+  image(samples[,,imgs[i]], main=paste("Sample number", toString(imgs[i])))
+}
+@
+See Figure \ref{fig:realisation} for the images. Because of the speed of the algorithm, I did not have time to show 10 independent realizations, but only 10 random images from one chain. I have also not proven convergence, although it was quite clear from the images that there was no significant change in the chain after about 200 samples.
+
+The expectation and variation is estimated as follows
+<<expvarest, tidy=FALSE, fig.cap='Gibbs estimated expectation and variation.', cache=FALSE, eval=TRUE, echo=TRUE, fig.height=4, fig.width=7>>=
+me <- apply(samples[,,burnin:n], c(1,2), mean)
+va <- apply(samples[,,burnin:n], c(1,2), var)
+
+par(mfrow=c(1,2))
+
+image(me, main=paste("Estimated E(L|o)"))
+image(va, main=paste("Estimated Var(L|o)"))
+@
+See Figure \ref{fig:expvarest}. We note that the model varies much in some specific areas, and stays mostly constant in the rest of the domain.
+
+Since we have binary data, the MMAP is especially easy to plot, see Figure \ref{fig:mmapest}
+<<mmapest, tidy=FALSE, fig.cap='Gibbs estimated MMAP.', cache=FALSE, eval=TRUE, echo=TRUE, fig.height=4, fig.width=4>>=
+image(me > 0.5, main=paste("MMAP(L|o)"))
+@
+
+\subsection*{c) Comparison}
+It is clear from the figures that there is a big difference in the two models. The first note to be made is that with the neighborhood prior, we obtain images more similar to our geologically comparable domain. The first model produced images where the shale was not sufficiently clumped together. Second note is that the variance is much lower in our second model, which is very good. The variance is most significant at the boundaries between where we thing there is sand, and where we think there is shale, which makes sense.
+
+\end{document}
